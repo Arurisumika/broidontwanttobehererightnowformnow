@@ -1,0 +1,114 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wallet</title>
+<link rel="preconnect" href="https://static.line-scdn.net">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:0;background:#f6f7fb;color:#111}
+  .wrap{max-width:520px;margin:24px auto;padding:20px}
+  .card{background:#fff;border-radius:16px;box-shadow:0 8px 24px rgba(0,0,0,.06);padding:20px}
+  .title{font-size:20px;font-weight:800}
+  .sub{margin-top:6px;color:#666;font-size:14px}
+  .amt{font-size:40px;font-weight:900;margin:14px 0}
+  .row{display:flex;justify-content:space-between;align-items:center;margin:6px 0}
+  .btn{appearance:none;border:0;border-radius:12px;background:#111;color:#fff;padding:12px 16px;font-weight:700;cursor:pointer}
+  .btn.secondary{background:#e9eaef;color:#111}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  input{width:100%;padding:12px;border-radius:12px;border:1px solid #e2e4ea;font-size:16px;box-sizing:border-box}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div class="title" id="roleTitle">Wallet</div>
+      <div class="sub" id="userName">—</div>
+      <div class="amt" id="balance">฿—</div>
+      <div class="row"><div>เงินเข้า (วันนี้)</div><div id="incoming">฿—</div></div>
+      <div class="row"><div>อัปเดตล่าสุด</div><div id="updated">—</div></div>
+      <div style="height:12px"></div>
+      <div class="grid">
+        <button class="btn" id="plus100">+฿100</button>
+        <button class="btn" id="plus500">+฿500</button>
+        <button class="btn" id="plus1000">+฿1000</button>
+      </div>
+      <div style="height:10px"></div>
+      <div class="row">
+        <input id="custom" type="number" min="1" placeholder="จำนวนเงินเอง (฿)">
+        <button class="btn" id="plusCustom" style="margin-left:10px;white-space:nowrap">เพิ่มเงินเข้า</button>
+      </div>
+      <div style="height:10px"></div>
+      <div class="row">
+        <button class="btn secondary" id="refresh">รีเฟรช</button>
+        <button class="btn secondary" id="reset">รีเซ็ตยอดเฉพาะวันนี้</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+const LIFF_ID="YOUR_LIFF_ID";
+const role=new URLSearchParams(location.search).get("role")||"worker";
+const fmt=n=>"฿"+Number(n||0).toLocaleString("th-TH");
+const todayKey=()=>new Date().toISOString().slice(0,10);
+
+let userId="anon";
+let storeKeys={bal:"",inc:""};
+
+function loadStore(){
+  const b=Number(localStorage.getItem(storeKeys.bal)||0);
+  const i=JSON.parse(localStorage.getItem(storeKeys.inc)||"{}");
+  const incToday=Number(i[todayKey()]||0);
+  return {balance:b,incomingToday:incToday,iObj:i};
+}
+
+function saveStore(balance,incomingToday,iObj){
+  localStorage.setItem(storeKeys.bal,String(balance));
+  iObj[todayKey()]=incomingToday;
+  localStorage.setItem(storeKeys.inc,JSON.stringify(iObj));
+}
+
+function render(){
+  const {balance,incomingToday}=loadStore();
+  document.getElementById("balance").textContent=fmt(balance);
+  document.getElementById("incoming").textContent=fmt(incomingToday);
+  document.getElementById("updated").textContent=new Date().toLocaleString("th-TH");
+}
+
+function addAmount(n){
+  if(!n||n<=0) return;
+  const s=loadStore();
+  const isWorker = role==="worker";
+  const newBal = isWorker ? s.balance + n : s.balance;
+  const newInc = isWorker ? s.incomingToday + n : s.incomingToday;
+  saveStore(newBal,newInc,s.iObj);
+  render();
+}
+
+async function init(){
+  await liff.init({liffId:LIFF_ID});
+  if(!liff.isLoggedIn()) return liff.login();
+  const idt=liff.getDecodedIDToken();
+  userId=idt?.sub||"anon";
+  storeKeys={
+    bal:`balance_${userId}_${role}`,
+    inc:`incoming_${userId}_${role}`
+  };
+  const prof=await liff.getProfile();
+  document.getElementById("roleTitle").textContent=role==="employer"?"กระเป๋าผู้จ้างงาน":"กระเป๋าผู้รับงาน";
+  document.getElementById("userName").textContent=prof.displayName||"—";
+  if(localStorage.getItem(storeKeys.bal)===null) localStorage.setItem(storeKeys.bal,"0");
+  if(localStorage.getItem(storeKeys.inc)===null) localStorage.setItem(storeKeys.inc,"{}");
+  render();
+  document.getElementById("plus100").onclick=()=>addAmount(100);
+  document.getElementById("plus500").onclick=()=>addAmount(500);
+  document.getElementById("plus1000").onclick=()=>addAmount(1000);
+  document.getElementById("plusCustom").onclick=()=>{const v=Number(document.getElementById("custom").value||0); addAmount(v);};
+  document.getElementById("refresh").onclick=()=>render();
+  document.getElementById("reset").onclick=()=>{const s=loadStore(); saveStore(s.balance,0,s.iObj); render();};
+}
+init();
+</script>
+</body>
+</html>
